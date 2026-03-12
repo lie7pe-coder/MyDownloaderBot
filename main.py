@@ -18,10 +18,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "http" not in url: return
     
     chat_id = update.message.chat_id
-    status = await update.message.reply_text("⏳ جاري التحميل (سيتم توفير نسخة بدون صوت)...")
+    status = await update.message.reply_text("🚀 جاري سحب الفيديو بأعلى جودة...")
     
-    # تحميل الفيديو الأصلي (بصوت)
-    v_opts = {
+    ydl_opts = {
         'format': 'bestvideo+bestaudio/best',
         'outtmpl': f'vid_{chat_id}_%(id)s.%(ext)s',
         'merge_output_format': 'mp4',
@@ -31,57 +30,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
 
     try:
-        with yt_dlp.YoutubeDL(v_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = await asyncio.to_thread(ydl.extract_info, url, download=True)
             v_file = ydl.prepare_filename(info)
             if not v_file.endswith('.mp4'): v_file = os.path.splitext(v_file)[0] + ".mp4"
 
-            # إنشاء أزرار الخيارات
-            keyboard = [[InlineKeyboardButton("🔇 إرسال كمتحركة (بدون تراك صوتي)", callback_data=f"mute|{url}")]]
+            # الزر الآن يشير إلى نفس الملف المحمل محلياً
+            keyboard = [[InlineKeyboardButton("🔇 إرسال كمتحركة (بدون صوت)", callback_data=f"gif|{v_file}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
             with open(v_file, 'rb') as vf:
-                await update.message.reply_video(video=vf, caption="🎬 الفيديو الأصلي", reply_markup=reply_markup)
+                await update.message.reply_video(
+                    video=vf, 
+                    caption="✅ الفيديو الأصلي بجودة كاملة",
+                    reply_markup=reply_markup,
+                    supports_streaming=True
+                )
             
-            os.remove(v_file)
+            # ملاحظة: لن نحذف الملف فوراً لنسمح للمستخدم بالضغط على زر المتحركة
+            # سيتم الحذف بواسطة مهمة مجدولة أو عند الضغط على الزر
             await status.delete()
             
     except Exception as e:
-        await status.edit_text(f"❌ خطأ: {str(e)}")
+        await status.edit_text(f"❌ فشل التحميل: {str(e)}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     data = query.data.split("|")
-    if data[0] == "mute":
-        url = data[1]
-        chat_id = query.message.chat_id
+    if data[0] == "gif":
+        v_file = data[1]
         
-        # تحميل الفيديو "بدون تراك صوتي" نهائياً من المصدر
-        mute_opts = {
-            'format': 'bestvideo', # نطلب الفيديو فقط بدون Audio
-            'outtmpl': f'mute_{chat_id}_%(id)s.%(ext)s',
-            'merge_output_format': 'mp4',
-            'user_agent': random.choice(USER_AGENTS),
-            'quiet': True,
-        }
-        
-        status_msg = await query.message.reply_text("🔄 جاري معالجة النسخة الصامتة (بدون تراك)...")
-        
-        try:
-            with yt_dlp.YoutubeDL(mute_opts) as ydl:
-                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-                m_file = ydl.prepare_filename(info)
-                if not m_file.endswith('.mp4'): m_file = os.path.splitext(m_file)[0] + ".mp4"
-
-                with open(m_file, 'rb') as mf:
-                    await query.message.reply_animation(animation=mf, caption="🎥 تم الإرسال كمتحركة صامتة نهائياً")
-                
-                os.remove(m_file)
-                await status_msg.delete()
-        except Exception as e:
-            await status_msg.edit_text("❌ فشل في معالجة النسخة الصامتة.")
+        if os.path.exists(v_file):
+            # إرسال كـ animation يزيل الصوت تلقائياً في تليجرام
+            with open(v_file, 'rb') as mf:
+                await query.message.reply_animation(
+                    animation=mf, 
+                    caption="🎥 نسخة متحركة (بدون تراك صوتي)"
+                )
+            # الآن نحذف الملف بعد الإرسال بنجاح
+            os.remove(v_file)
+        else:
+            await query.edit_message_caption(caption="⚠️ عذراً، الملف حُذف من السيرفر. أرسل الرابط مجدداً.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
