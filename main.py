@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
 # ضع التوكن الخاص بك هنا
-TOKEN = "ضع_التوكن_هنا"
+TOKEN = "8650672657:AAHKkLKrMYIVrWbD5nrOT99QKDKLnJPgmZ4"
 
 # إعدادات التمويه لتجنب الحظر
 USER_AGENTS = [
