@@ -18,9 +18,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "http" not in url: return
     
     chat_id = update.message.chat_id
-    status = await update.message.reply_text("⏳ جاري معالجة الرابط...")
+    status = await update.message.reply_text("⏳ جاري التحميل (سيتم توفير نسخة بدون صوت)...")
     
-    ydl_opts = {
+    # تحميل الفيديو الأصلي (بصوت)
+    v_opts = {
         'format': 'bestvideo+bestaudio/best',
         'outtmpl': f'vid_{chat_id}_%(id)s.%(ext)s',
         'merge_output_format': 'mp4',
@@ -28,55 +29,64 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'user_agent': random.choice(USER_AGENTS),
         'quiet': True,
     }
-    
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = await asyncio.to_thread(ydl.extract_info, url, download=True)
-            filename = ydl.prepare_filename(info)
-            if not filename.endswith('.mp4'):
-                filename = os.path.splitext(filename)[0] + ".mp4"
 
-            # إنشاء الزر أسفل الفيديو
-            keyboard = [[InlineKeyboardButton("🎬 إرسال كمتحركة (بدون صوت)", callback_data=f"gif|{filename}")]]
+    try:
+        with yt_dlp.YoutubeDL(v_opts) as ydl:
+            info = await asyncio.to_thread(ydl.extract_info, url, download=True)
+            v_file = ydl.prepare_filename(info)
+            if not v_file.endswith('.mp4'): v_file = os.path.splitext(v_file)[0] + ".mp4"
+
+            # إنشاء أزرار الخيارات
+            keyboard = [[InlineKeyboardButton("🔇 إرسال كمتحركة (بدون تراك صوتي)", callback_data=f"mute|{url}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
-            with open(filename, 'rb') as vf:
-                await update.message.reply_video(
-                    video=vf, 
-                    caption="✅ تم تحميل الفيديو بنجاح",
-                    reply_markup=reply_markup,
-                    supports_streaming=True
-                )
+            with open(v_file, 'rb') as vf:
+                await update.message.reply_video(video=vf, caption="🎬 الفيديو الأصلي", reply_markup=reply_markup)
             
-            # ملاحظة: لا نحذف الملف هنا فوراً لأننا قد نحتاجه إذا ضغط المستخدم على زر GIF
-            # سيتم الحذف بعد فترة أو عند الضغط على الزر
+            os.remove(v_file)
             await status.delete()
             
     except Exception as e:
-        await status.edit_text(f"❌ فشل: {str(e)}")
+        await status.edit_text(f"❌ خطأ: {str(e)}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     data = query.data.split("|")
-    if data[0] == "gif":
-        filename = data[1]
-        if os.path.exists(filename):
-            await query.message.reply_animation(
-                animation=open(filename, 'rb'),
-                caption="🎥 تم الإرسال بصيغة متحركة"
-            )
-            # الآن يمكن حذف الملف بعد تلبية الطلبين
-            os.remove(filename)
-        else:
-            await query.message.reply_text("⚠️ عذراً، الملف انتهت صلاحيته من السيرفر.")
+    if data[0] == "mute":
+        url = data[1]
+        chat_id = query.message.chat_id
+        
+        # تحميل الفيديو "بدون تراك صوتي" نهائياً من المصدر
+        mute_opts = {
+            'format': 'bestvideo', # نطلب الفيديو فقط بدون Audio
+            'outtmpl': f'mute_{chat_id}_%(id)s.%(ext)s',
+            'merge_output_format': 'mp4',
+            'user_agent': random.choice(USER_AGENTS),
+            'quiet': True,
+        }
+        
+        status_msg = await query.message.reply_text("🔄 جاري معالجة النسخة الصامتة (بدون تراك)...")
+        
+        try:
+            with yt_dlp.YoutubeDL(mute_opts) as ydl:
+                info = await asyncio.to_thread(ydl.extract_info, url, download=True)
+                m_file = ydl.prepare_filename(info)
+                if not m_file.endswith('.mp4'): m_file = os.path.splitext(m_file)[0] + ".mp4"
+
+                with open(m_file, 'rb') as mf:
+                    await query.message.reply_animation(animation=mf, caption="🎥 تم الإرسال كمتحركة صامتة نهائياً")
+                
+                os.remove(m_file)
+                await status_msg.delete()
+        except Exception as e:
+            await status_msg.edit_text("❌ فشل في معالجة النسخة الصامتة.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_handler(CallbackQueryHandler(button_handler))
-    print("🚀 سورس الأزرار التفاعلية يعمل...")
     app.run_polling()
 
 if __name__ == '__main__':
