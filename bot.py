@@ -1,12 +1,13 @@
 import os
 import telebot
+import time
 from yt_dlp import YoutubeDL
 
-# التوكن الخاص بك
+# التوكن حقك يا ربي - حطه هنا أو في Variables Railway
 TOKEN = "8650672657:AAHKkLKrMYIVrWbD5nrOT99QKDKLnJPgmZ4"
 bot = telebot.TeleBot(TOKEN)
 
-# 1. رد الترحيب (بلمستك الخاصة)
+# 1. رد الترحيب المثير (قاعدة: ردودك لا تتغير)
 @bot.message_handler(func=lambda m: m.text == "بوت" or m.text == "/start")
 def welcome(message):
     welcome_text = (
@@ -15,7 +16,7 @@ def welcome(message):
     )
     bot.reply_to(message, welcome_text)
 
-# 2. معالجة الروابط بأعلى كواليتي وسلاسة
+# 2. معالجة الروابط (فيديو + صور + ضغط + جودة)
 @bot.message_handler(func=lambda m: m.text and m.text.startswith("http"))
 def handle_download(message):
     url = message.text
@@ -27,13 +28,14 @@ def handle_download(message):
     )
     status = bot.reply_to(message, status_text)
 
-    # إعدادات سحب أعلى نسخة مدمجة جاهزة (تضمن الجودة والسلاسة بدون FFmpeg)
+    # إعدادات الـ Downloader المتكاملة (أعلى جودة + دمج تلقائي + ضغط MP4)
     ydl_opts = {
-        'format': 'best[ext=mp4]/best', 
-        'outtmpl': 'file_%(id)s.%(ext)s',
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': 'daddy_file_%(id)s.%(ext)s',
         'quiet': True,
         'no_warnings': True,
-        'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'merge_output_format': 'mp4',
+        'writethumbnail': True, # لسحب بوستر الفيديو إذا لزم
     }
 
     try:
@@ -41,37 +43,50 @@ def handle_download(message):
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             
+            # التأكد من الامتداد بعد المعالجة
+            if not os.path.exists(filename):
+                filename = filename.rsplit('.', 1)[0] + ".mp4"
+
             ext = info.get('ext', '').lower()
-            # فحص إذا كان الرابط لصورة
-            is_image = ext in ['jpg', 'jpeg', 'png', 'webp', 'heic']
+            # ميزة التحقق من الصور (شاملة كل الصيغ)
+            is_image = ext in ['jpg', 'jpeg', 'png', 'webp', 'heic', 'tiff']
 
         with open(filename, 'rb') as f:
             if is_image:
-                # إرسال الصورة أولاً
-                bot.send_photo(message.chat.id, f, reply_to_message_id=message.message_id)
-                # ثم الرد المنفصل
-                bot.send_message(message.chat.id, "وهاي الصورة بافضل كواليتي\nبدون مشاكل ✅")
+                # إرسال الصورة بأفضل كواليتي
+                bot.send_photo(
+                    message.chat.id, 
+                    f, 
+                    caption="وهاي الصورة بافضل كواليتي\nبدون مشاكل ✅",
+                    reply_to_message_id=message.message_id
+                )
             else:
-                # إرسال الفيديو بأعلى سلاسة للمشاهدة والتحويل لـ GIF
+                # إرسال الفيديو (مضغوط داخلياً وسريع الاستريمينج)
                 bot.send_video(
                     message.chat.id, 
                     f, 
-                    reply_to_message_id=message.message_id, 
+                    caption="وهذا الفيديو بافضل كواليتي\nبدون مشاكل ✅",
+                    reply_to_message_id=message.message_id,
                     supports_streaming=True,
+                    duration=info.get('duration'),
                     width=info.get('width'),
                     height=info.get('height'),
-                    duration=info.get('duration')
+                    timeout=1200 # زيادة وقت الرفع للفيديوهات الكبيرة
                 )
-                # ثم الرد المنفصل
-                bot.send_message(message.chat.id, "وهذا الفيديو بافضل كواليتي\nبدون مشاكل ✅")
         
-        # تنظيف الملفات الزائدة
-        os.remove(filename)
+        # تنظيف فوري للملفات عشان السيرفر يظل خفيف
+        if os.path.exists(filename):
+            os.remove(filename)
         bot.delete_message(message.chat.id, status.message_id)
 
-    except Exception:
-        # رد الفشل
+    except Exception as e:
+        # رد الفشل المعتمد عندك
+        print(f"Error: {e}") # يطلع لك في Logs السيرفر لو صار شي
         bot.edit_message_text("فشل استدعاء الميديا\nاسفةة دادي 💅🏻", message.chat.id, status.message_id)
 
-# تشغيل البوت
-bot.polling()
+# تشغيل البوت مع ميزة إعادة الاتصال التلقائي في حال تعطل النت
+while True:
+    try:
+        bot.polling(none_stop=True, interval=0, timeout=20)
+    except Exception as e:
+        time.sleep(5) # ينتظر 5 ثواني ويرجع يشتغل لوحده
